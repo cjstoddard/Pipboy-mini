@@ -1,0 +1,40 @@
+--- INVENTORY ---
+
+WEAPONS
+  10mm Pistol       x1
+  Hunting Rifle     x1
+  Laser Musket      x1
+  Pipe Wrench       x2
+
+ARMOR
+  Leather Armor     x1
+  Vault Suit        x1
+  Combat Helmet     x1
+  Raider Greaves    x1
+
+CONSUMABLES
+  Stimpak           x12
+  Rad-X             x5
+  Jet               x3
+  Psycho            x2
+  Brahmin Milk      x4
+  Mutfruit          x8
+  Purified Water    x20
+  Pre-War Canned Ham x3
+
+JUNK
+  Duct Tape         x15
+  Screws            x40
+  Aluminum Can      x22
+  Copper            x18
+  Steel             x55
+  Rubber            x12
+  Acid              x6
+  Fertilizer        x9
+
+QUEST ITEMS
+  Fusion Core       x2
+  Holotape          x1
+  Key: Vault 111    x1
+
+--- END INVENTORY ---
