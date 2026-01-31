@@ -11,7 +11,7 @@ A Fallout-style Pip-Boy interface for a Raspberry Pi Zero 2W, built around the W
 | Component | Notes | Link |
 |---|---|---|
 | Raspberry Pi Zero 2W | Runs Raspbian GNU/Linux 13 (Trixie), armv7l | [Raspberry Pi Zero 2WH](https://www.amazon.com/Raspberry-Pi-Zero-2-WH/dp/B0DB2JBD9C) |
-| Waveshare 1.44" LCD HAT | ST7735S, 128×128, SPI. Includes 5-position joystick and 3 push buttons | [Waveshare 1.44inch LCD Display HAT](https://www.amazon.com/dp/B077YK8161?ref=ppx_yo2ov_dt_b_fed_asin_title&th=10 |
+| Waveshare 1.44" LCD HAT | ST7735S, 128×128, SPI. Includes 5-position joystick and 3 push buttons | [Waveshare 1.44inch LCD Display HAT](https://www.amazon.com/dp/B077YK8161?ref=ppx_yo2ov_dt_b_fed_asin_title&th=10) |
 | Geekworm X306 V1.5 UPS | Single-cell 18650 UPS for the Pi Zero 2W. | [Geekworm X306 V1.5 UPS Expansion Board](https://www.amazon.com/dp/B0B74NT38D?ref=ppx_yo2ov_dt_b_fed_asin_title) |
 | 18650 Battery | Single cell rechargable battery | [3.7 Volt Rechargeable Battery, 3000mAh Battery](https://www.amazon.com/dp/B0CRNSFQGX) |
 
