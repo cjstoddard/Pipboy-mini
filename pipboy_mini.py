@@ -6,8 +6,9 @@
 =============================================================================
 
   SCREENS:
-    STAT  - System info (CPU, RAM, Disk, IP, Uptime, Battery status note)
+    STAT  - Vault Boy splash with welcome message
     INV   - Inventory loaded from ./inv.txt
+    DATA  - System info (CPU, RAM, Disk, IP, Uptime, Temp)
     RADIO - MP3 player for files in ./music/
 
   CONTROLS (Waveshare 1.44" LCD HAT GPIO mapping):
@@ -27,16 +28,14 @@
 
   DIRECTORY LAYOUT:
     pipboy_mini.py
+    VaultBoy.png       <- Vault Boy sprite for STAT screen
     inv.txt            <- your inventory text
     music/             <- folder containing .mp3 files
     fonts/             <- (optional) .ttf fonts; falls back to PIL defaults
 
   NOTE ON BATTERY:
     The Geekworm X306 V1.5 does NOT expose battery level via software or GPIO.
-    The STAT screen shows a visual indicator based on the 4 blue LEDs on the
-    X306 board itself — you must read those physically. The on-screen battery
-    icon is a reminder / placeholder that displays "CHECK LEDS" prompting you
-    to glance at the hardware indicator.
+    The 4 blue LEDs on the X306 board are the only battery indicator.
 =============================================================================
 """
 
@@ -136,10 +135,11 @@ ALL_INPUT_PINS = [
 ]
 
 # File paths (relative to script location)
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-INV_FILE    = os.path.join(SCRIPT_DIR, "inv.txt")
-MUSIC_DIR   = os.path.join(SCRIPT_DIR, "music")
-FONT_DIR    = os.path.join(SCRIPT_DIR, "fonts")
+SCRIPT_DIR    = os.path.dirname(os.path.abspath(__file__))
+VAULTBOY_IMG  = os.path.join(SCRIPT_DIR, "VaultBoy.png")
+INV_FILE      = os.path.join(SCRIPT_DIR, "inv.txt")
+MUSIC_DIR     = os.path.join(SCRIPT_DIR, "music")
+FONT_DIR      = os.path.join(SCRIPT_DIR, "fonts")
 
 # Colour palette — classic Pip-Boy green-on-black with accent variations
 CLR_BG       = (0,   0,   0)    # black background
@@ -228,8 +228,7 @@ class ST7735Display:
         self._send_command(self._SLPOUT)
         time.sleep(0.15)
         self._send_command(self._COLMOD, [0x55])   # 16-bit RGB565
-        self._send_command(self._MADCTL, [self._MADCTL_MX | self._MADCTL_MV | self._MADCTL_RGB])
-        self._send_command(self._INVON)
+        self._send_command(self._MADCTL, [self._MADCTL_MX | self._MADCTL_MV | self._MADCTL_BGR])
         self._send_command(self._DISPON)
 
         # Backlight on
@@ -529,21 +528,85 @@ def _get_cpu_temp() -> str:
 
 
 class StatScreen:
-    """STAT screen — system information dashboard."""
+    """STAT screen — Vault Boy splash / welcome screen."""
 
     def __init__(self):
-        # Kick off the first CPU read so we have a baseline on the next frame
-        _get_cpu_percent()
+        # Load and prepare the Vault Boy sprite once at init time.
+        # The PNG is palette mode with transparency; convert to RGBA so we
+        # can composite it cleanly onto the black background.
+        self._vaultboy = None
+        try:
+            raw = Image.open(VAULTBOY_IMG).convert("RGBA")
+            # Scale up to a reasonable size for the 128x128 display.
+            # The source is 44x64; scale to 52x76 (roughly 1.2x) so it
+            # fills a good chunk of the screen without dominating it.
+            self._vaultboy = raw.resize((52, 76), Image.LANCZOS)
+        except Exception as e:
+            print(f"WARNING: Could not load VaultBoy.png ({e}). STAT screen will show text only.")
 
     def handle_event(self, evt):
-        # STAT screen has no interactive elements; all nav is handled by main loop
         pass
 
     def draw(self) -> Image.Image:
         img, draw = new_frame()
 
         # --- Header ---
-        draw_header(draw, "STAT", 0, 3)
+        draw_header(draw, "STAT", 0, 4)
+
+        # --- Vault Boy sprite, centred horizontally, sitting in the upper
+        #     portion of the screen ---
+        if self._vaultboy:
+            vb_w, vb_h = self._vaultboy.size
+            paste_x = (DISP_WIDTH - vb_w) // 2
+            paste_y = 20   # just below the header bar
+            # Paste using the alpha channel as a mask so the transparent
+            # background doesn't overwrite our black frame.
+            img.paste(self._vaultboy, (paste_x, paste_y), self._vaultboy)
+            text_y = paste_y + vb_h + 4
+        else:
+            text_y = 30
+
+        # --- Welcome text below the sprite ---
+        # Centre each line horizontally
+        lines = [
+            ("WELCOME, VAULT DWELLER", FONT_BODY, CLR_GREEN),
+            ("", FONT_SMALL, CLR_GREEN_DIM),
+            ("Use joystick L/R to", FONT_SMALL, CLR_GREEN_DIM),
+            ("navigate screens.", FONT_SMALL, CLR_GREEN_DIM),
+        ]
+        for text, font, colour in lines:
+            if text:
+                bbox = draw.textbbox((0, 0), text, font=font)
+                tw = bbox[2] - bbox[0]
+                draw.text(((DISP_WIDTH - tw) // 2, text_y), text, fill=colour, font=font)
+            text_y += 11
+
+        # --- Footer ---
+        draw_footer(draw, "<> switch screen")
+
+        return img
+
+
+# =============================================================================
+# SCREEN: DATA (System Information)
+# =============================================================================
+
+class DataScreen:
+    """DATA screen — system information dashboard."""
+
+    def __init__(self):
+        # Kick off the first CPU read so we have a baseline on the next frame
+        _get_cpu_percent()
+
+    def handle_event(self, evt):
+        # DATA screen has no interactive elements; all nav is handled by main loop
+        pass
+
+    def draw(self) -> Image.Image:
+        img, draw = new_frame()
+
+        # --- Header ---
+        draw_header(draw, "DATA", 2, 4)
 
         # --- Body content ---
         y = 19  # start below header
@@ -563,7 +626,6 @@ class StatScreen:
             ("IP",    ip),
             ("UP",    up),
             ("TEMP",  temp),
-            ("BATT",  "SEE X306 LEDS"),
         ]
 
         for label, value in lines:
@@ -573,15 +635,6 @@ class StatScreen:
             label_w = draw.textbbox((0, 0), f"{label}:", font=FONT_BODY)[2]
             draw.text((6 + label_w, y), value, fill=CLR_GREEN, font=FONT_BODY)
             y += line_h
-
-        # Decorative divider above battery note
-        draw_divider(draw, y - 2)
-        y += 2
-
-        # Battery note box
-        draw.rectangle([(2, y), (DISP_WIDTH - 3, y + 16)], outline=CLR_AMBER, fill=(20, 10, 0))
-        draw.text((5, y + 2), "BATT: Read X306", fill=CLR_AMBER, font=FONT_SMALL)
-        draw.text((5, y + 9), "4 blue LEDs on board", fill=CLR_AMBER, font=FONT_SMALL)
 
         # --- Footer ---
         draw_footer(draw, "<> switch screen")
@@ -638,7 +691,7 @@ class InvScreen:
     def draw(self) -> Image.Image:
         img, draw = new_frame()
 
-        draw_header(draw, "INV", 1, 3)
+        draw_header(draw, "INV", 1, 4)
 
         y = 18
         line_h = 10
@@ -779,7 +832,7 @@ class RadioScreen:
         self._check_ended()
 
         img, draw = new_frame()
-        draw_header(draw, "RADIO", 2, 3)
+        draw_header(draw, "RADIO", 3, 4)
 
         if not self._tracks:
             # Empty state
@@ -871,7 +924,7 @@ class RadioScreen:
 class PipBoyMini:
     """Top-level application: owns display, input, and screens."""
 
-    SCREENS = ["STAT", "INV", "RADIO"]
+    SCREENS = ["STAT", "DATA", "INV", "RADIO"]
 
     def __init__(self):
         print("[PipBoy Mini] Initialising display...")
@@ -884,6 +937,7 @@ class PipBoyMini:
         self.screens = [
             StatScreen(),
             InvScreen(),
+            DataScreen(),
             RadioScreen(),
         ]
         self.current_screen = 0   # start on STAT
@@ -928,9 +982,9 @@ class PipBoyMini:
     def cleanup(self):
         print("[PipBoy Mini] Shutting down...")
         self._running = False
-        # Stop audio
-        if hasattr(self.screens[2], 'cleanup'):
-            self.screens[2].cleanup()
+        # Stop audio (RadioScreen is the last screen in the list)
+        if hasattr(self.screens[-1], 'cleanup'):
+            self.screens[-1].cleanup()
         # Blank display and release GPIO
         try:
             blank = Image.new("RGB", (DISP_WIDTH, DISP_HEIGHT), CLR_BG)
