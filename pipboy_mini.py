@@ -21,6 +21,11 @@
     KEY 2          -> GPIO 20  : Context action (Next track on RADIO)
     KEY 3          -> GPIO 16  : Context action (Stop on RADIO)
 
+  SHUTDOWN:
+    Hold KEY 1 + KEY 2 simultaneously (from any screen) to start a 3-second
+    shutdown countdown.  Press any single button during the countdown to cancel.
+    If the countdown completes, the Pi powers off via `sudo systemctl poweroff`.
+
   DEPENDENCIES:
     sudo apt-get install python3-pil python3-numpy pygame
     sudo pip3 install spidev --break-system-packages
@@ -291,6 +296,12 @@ EVT_SEL   = "SELECT"
 EVT_KEY1  = "KEY1"
 EVT_KEY2  = "KEY2"
 EVT_KEY3  = "KEY3"
+EVT_SHUTDOWN = "SHUTDOWN"          # not from a single pin — synthesised by main loop
+
+# Shutdown combo: hold KEY1 + KEY2 simultaneously to enter the confirmation
+# countdown.  Press any other button during the countdown to cancel.
+SHUTDOWN_COMBO_PINS = (PIN_KEY1, PIN_KEY2)
+SHUTDOWN_CONFIRM_SECS = 3          # seconds the countdown runs before executing
 
 PIN_TO_EVT = {
     PIN_JOY_UP:    EVT_UP,
@@ -358,6 +369,14 @@ class InputManager:
             if self._event_queue:
                 return self._event_queue.pop(0)
         return None
+
+    def pins_held(self, pins) -> bool:
+        """Return True if every pin in *pins* is currently pressed.
+
+        This is a raw state check (no debounce, no edge detection) — intended
+        for detecting held combos that the single-button event queue can't see.
+        """
+        return all(self._read_pin(p) for p in pins)
 
     def cleanup(self):
         if GPIO_BACKEND == "lgpio" and self._chip is not None:
@@ -582,7 +601,7 @@ class StatScreen:
             text_y += 11
 
         # --- Footer ---
-        draw_footer(draw, "<> switch screen")
+        draw_footer(draw, "<> switch  K1+K2 off")
 
         return img
 
@@ -944,6 +963,48 @@ class PipBoyMini:
 
         self._running = True
 
+        # --- Shutdown state machine ---
+        # States: "idle" | "confirming"
+        # When the KEY1+KEY2 combo is detected we enter "confirming" and start
+        # a countdown timer.  Any other button press cancels back to "idle".
+        # When the timer expires we run cleanup() then `sudo systemctl poweroff`.
+        self._shutdown_state    = "idle"
+        self._shutdown_deadline = 0     # monotonic timestamp when countdown expires
+
+    # --- Shutdown confirmation screen --------------------------------------
+    def _draw_shutdown_confirm(self) -> Image.Image:
+        """Render the 'SHUTDOWN' countdown overlay.  Returns a full frame."""
+        remaining = max(0, self._shutdown_deadline - time.monotonic())
+        img, draw = new_frame()
+
+        # Header
+        draw_header(draw, "SHUTDOWN", 0, 1)
+
+        # Big countdown number, centred
+        secs_str = str(int(remaining) + 1)   # show 3, 2, 1 (not 2, 1, 0)
+        bbox     = draw.textbbox((0, 0), secs_str, font=FONT_BIG)
+        tw, th   = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.text(((DISP_WIDTH - tw) // 2, 38), secs_str,
+                  fill=CLR_GREEN, font=FONT_BIG)
+
+        # Flavour text
+        draw.text((8, 60),  "Powering down...", fill=CLR_GREEN_DIM, font=FONT_BODY)
+        draw.text((8, 72),  "Press any button", fill=CLR_GREEN_DIM, font=FONT_SMALL)
+        draw.text((8, 82),  "to cancel.",        fill=CLR_GREEN_DIM, font=FONT_SMALL)
+
+        # A progress bar draining left-to-right across the bottom area
+        bar_left, bar_right = 8, DISP_WIDTH - 9
+        bar_y = 100
+        bar_w = bar_right - bar_left
+        draw.rectangle([(bar_left, bar_y), (bar_right, bar_y + 4)], fill=CLR_GREEN_DIM)
+        fill_w = int(bar_w * (remaining / SHUTDOWN_CONFIRM_SECS))
+        if fill_w > 0:
+            draw.rectangle([(bar_left, bar_y), (bar_left + fill_w, bar_y + 4)],
+                           fill=CLR_GREEN)
+
+        draw_footer(draw, "any button: cancel")
+        return img
+
     # --- Main loop ---------------------------------------------------------
     def run(self):
         print("[PipBoy Mini] Running.  Press Ctrl+C to exit.")
@@ -956,8 +1017,35 @@ class PipBoyMini:
             self.input.poll()
             evt = self.input.get_event()
 
-            # 2. Process event
-            if evt:
+            # 2. Shutdown combo detection (before normal event dispatch)
+            combo_held = self.input.pins_held(SHUTDOWN_COMBO_PINS)
+
+            if self._shutdown_state == "idle":
+                if combo_held:
+                    # Combo just detected — enter confirming state
+                    self._shutdown_state    = "confirming"
+                    self._shutdown_deadline = time.monotonic() + SHUTDOWN_CONFIRM_SECS
+                    print("[PipBoy Mini] Shutdown combo detected — confirmation countdown started.")
+                    # Drain any KEY1/KEY2 edge events the poller just queued
+                    # so they don't also fire on the current screen.
+                    evt = None
+                    while self.input.get_event() is not None:
+                        pass
+
+            elif self._shutdown_state == "confirming":
+                if evt is not None:
+                    # Any button press during countdown → cancel
+                    self._shutdown_state = "idle"
+                    print("[PipBoy Mini] Shutdown cancelled.")
+                    evt = None   # don't let the cancel-press also do something else
+                elif time.monotonic() >= self._shutdown_deadline:
+                    # Countdown expired — do it
+                    print("[PipBoy Mini] Shutdown confirmed — powering off.")
+                    self._do_poweroff()
+                    break       # exits the main loop; finally block runs cleanup
+
+            # 3. Dispatch normal events (skipped while confirming)
+            if self._shutdown_state == "idle" and evt:
                 if evt == EVT_LEFT:
                     self.current_screen = (self.current_screen - 1) % len(self.screens)
                 elif evt == EVT_RIGHT:
@@ -966,17 +1054,29 @@ class PipBoyMini:
                     # Pass event down to current screen
                     self.screens[self.current_screen].handle_event(evt)
 
-            # 3. Render current screen
-            frame = self.screens[self.current_screen].draw()
+            # 4. Render
+            if self._shutdown_state == "confirming":
+                frame = self._draw_shutdown_confirm()
+            else:
+                frame = self.screens[self.current_screen].draw()
 
-            # 4. Push frame to display
+            # 5. Push frame to display
             self.display.show_image(frame)
 
-            # 5. Sleep remainder of frame budget
+            # 6. Sleep remainder of frame budget
             elapsed = time.time() - t0
             sleep_time = interval - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+    # --- Poweroff ----------------------------------------------------------
+    def _do_poweroff(self):
+        """Run cleanup, then issue a systemd poweroff.  Does not return."""
+        self.cleanup()
+        try:
+            subprocess.run(["sudo", "systemctl", "poweroff"], check=True)
+        except Exception as e:
+            print(f"[PipBoy Mini] poweroff failed: {e}")
 
     # --- Graceful shutdown -------------------------------------------------
     def cleanup(self):

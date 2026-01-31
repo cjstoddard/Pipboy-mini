@@ -8,12 +8,11 @@ A Fallout-style Pip-Boy interface for a Raspberry Pi Zero 2W, built around the W
 
 ## Hardware
 
-| Component | Notes | Link |
-|---|---|---|
-| Raspberry Pi Zero 2W | Runs Raspbian GNU/Linux 13 (Trixie), armv7l | [Raspberry Pi Zero 2WH](https://www.amazon.com/Raspberry-Pi-Zero-2-WH/dp/B0DB2JBD9C) |
-| Waveshare 1.44" LCD HAT | ST7735S, 128×128, SPI. Includes 5-position joystick and 3 push buttons | [Waveshare 1.44inch LCD Display HAT](https://www.amazon.com/dp/B077YK8161?ref=ppx_yo2ov_dt_b_fed_asin_title&th=10) |
-| Geekworm X306 V1.5 UPS | Single-cell 18650 UPS for the Pi Zero 2W. | [Geekworm X306 V1.5 UPS Expansion Board](https://www.amazon.com/dp/B0B74NT38D?ref=ppx_yo2ov_dt_b_fed_asin_title) |
-| 18650 Battery | Single cell rechargable battery | [3.7 Volt Rechargeable Battery, 3000mAh Battery](https://www.amazon.com/dp/B0CRNSFQGX) |
+| Component | Notes |
+|---|---|
+| Raspberry Pi Zero 2W | Runs Raspbian GNU/Linux 13 (Trixie), armv7l |
+| Waveshare 1.44" LCD HAT | ST7735S, 128×128, SPI. Includes 5-position joystick and 3 push buttons |
+| Geekworm X306 V1.5 UPS | Single-cell 18650 UPS for the Pi Zero 2W. Battery level is indicated by 4 blue LEDs on the board only — it cannot be read via software |
 
 The X306 connects to the Pi via pogo pins, and the LCD HAT stacks on top via the standard 40-pin GPIO header.
 
@@ -112,6 +111,16 @@ Tracks auto-advance when they finish. If no audio device is available (the Pi Ze
 
 ---
 
+## Shutdown
+
+There is no physical power button on the Pi Zero 2W / X306 stack, so pulling the plug without a clean shutdown risks SD card corruption. PipBoy Mini lets you power off safely from any screen.
+
+Hold **KEY 1 and KEY 2 simultaneously**. A confirmation screen appears with a 3-second countdown and a draining progress bar. If the countdown completes, the application cleans up (stops audio, blanks the display, releases GPIO) and issues `sudo systemctl poweroff`.
+
+Press any single button during the countdown to cancel and return to wherever you were.
+
+---
+
 ## Controls Reference
 
 All controls map to the physical joystick and three buttons on the Waveshare LCD HAT.
@@ -126,6 +135,7 @@ All controls map to the physical joystick and three buttons on the Waveshare LCD
 | KEY 1 | 21 | — | RADIO: play / pause |
 | KEY 2 | 20 | — | RADIO: next track |
 | KEY 3 | 16 | — | RADIO: stop |
+| KEY 1 + KEY 2 (held) | 21 + 20 | Enter shutdown countdown (any screen) | — |
 
 ---
 
@@ -144,17 +154,3 @@ To use a custom font, drop a `.ttf` file into `fonts/` and update the `_load_fon
 ## Battery
 
 The Geekworm X306 V1.5 does not expose battery level via any GPIO pin or software interface. The four blue LEDs on the X306 board are the only indicator — 25%, 50%, 75%, 100%.
-
----
-
-## TODO
-
-3D printed case and an armband of somekind
-
----
-
-Copyrights and Trademarks: Both Fallout and Pipboy copyrights and trademarks belong to ZeniMax Media Inc and Bethesda Games. This project was developed for fun as part of a hobby, no infringment of any copyrights or trademarks is intended.
-
----
-
-Disclaimer: This software is provided "AS IS", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a paticular purpose and nonifringment. In no event shall the author or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use or other dealings in the software.
