@@ -146,6 +146,12 @@ The Geekworm X306 V1.5 does not expose battery level via any GPIO pin or softwar
 
 ---
 
+## TODO
+
+3D printed case and an armband of somekind
+
+---
+
 Copyrights and Trademarks: Both Fallout and Pipboy copyrights and trademarks belong to ZeniMax Media Inc and Bethesda Games. This project was developed for fun as part of a hobby, no infringment of any copyrights or trademarks is intended.
 
 ---
